@@ -1,14 +1,15 @@
 apply plugin: 'com.android.application'
 
 dependencies {
-    compile fileTree(dir: 'libs', include: '*.jar')
+    compile fileTree(include: '*.jar', dir: 'libs')
     compile project(':StackBlur')
 }
 
 android {
+    signingConfigs {
+    }
     compileSdkVersion 19
-    buildToolsVersion '25.0.2'
-
+    buildToolsVersion '26.0.2'
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'

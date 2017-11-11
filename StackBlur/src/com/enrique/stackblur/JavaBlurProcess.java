@@ -1,6 +1,8 @@
 package com.enrique.stackblur;
 
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -33,307 +35,264 @@ import java.util.concurrent.Callable;
  * @license: Apache License 2.0
  */
 class JavaBlurProcess implements BlurProcess {
-
-	private static final short[] stackblur_mul = {
-			512, 512, 456, 512, 328, 456, 335, 512, 405, 328, 271, 456, 388, 335, 292, 512,
-			454, 405, 364, 328, 298, 271, 496, 456, 420, 388, 360, 335, 312, 292, 273, 512,
-			482, 454, 428, 405, 383, 364, 345, 328, 312, 298, 284, 271, 259, 496, 475, 456,
-			437, 420, 404, 388, 374, 360, 347, 335, 323, 312, 302, 292, 282, 273, 265, 512,
-			497, 482, 468, 454, 441, 428, 417, 405, 394, 383, 373, 364, 354, 345, 337, 328,
-			320, 312, 305, 298, 291, 284, 278, 271, 265, 259, 507, 496, 485, 475, 465, 456,
-			446, 437, 428, 420, 412, 404, 396, 388, 381, 374, 367, 360, 354, 347, 341, 335,
-			329, 323, 318, 312, 307, 302, 297, 292, 287, 282, 278, 273, 269, 265, 261, 512,
-			505, 497, 489, 482, 475, 468, 461, 454, 447, 441, 435, 428, 422, 417, 411, 405,
-			399, 394, 389, 383, 378, 373, 368, 364, 359, 354, 350, 345, 341, 337, 332, 328,
-			324, 320, 316, 312, 309, 305, 301, 298, 294, 291, 287, 284, 281, 278, 274, 271,
-			268, 265, 262, 259, 257, 507, 501, 496, 491, 485, 480, 475, 470, 465, 460, 456,
-			451, 446, 442, 437, 433, 428, 424, 420, 416, 412, 408, 404, 400, 396, 392, 388,
-			385, 381, 377, 374, 370, 367, 363, 360, 357, 354, 350, 347, 344, 341, 338, 335,
-			332, 329, 326, 323, 320, 318, 315, 312, 310, 307, 304, 302, 299, 297, 294, 292,
-			289, 287, 285, 282, 280, 278, 275, 273, 271, 269, 267, 265, 263, 261, 259
-	};
-
-	private static final byte[] stackblur_shr = {
-			9, 11, 12, 13, 13, 14, 14, 15, 15, 15, 15, 16, 16, 16, 16, 17,
-			17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18, 18, 19,
-			19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20,
-			20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 21,
-			21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21,
-			21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 22, 22, 22, 22, 22, 22,
-			22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22,
-			22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 23,
-			23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
-			23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
-			23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23,
-			23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-			24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-			24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-			24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24,
-			24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24
-	};
-
 	@Override
-	public Bitmap blur(Bitmap original, float radius) {
-		int w = original.getWidth();
-		int h = original.getHeight();
+	public void blur(Bitmap src, Bitmap dst, float radius) {
+		if (!dst.isMutable()) {
+			throw new IllegalArgumentException("dst must be mutable");
+		}
+		if (radius < 0) {
+			throw new IllegalArgumentException("radius must be >= 0");
+		}
+		if (radius == 0) {
+			if (src != dst) {
+				Canvas canvas = new Canvas(dst);
+				Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
+				canvas.drawBitmap(src, null, rect, null);
+			}
+			return;
+		}
+		int w = src.getWidth();
+		int h = src.getHeight();
 		int[] currentPixels = new int[w * h];
-		original.getPixels(currentPixels, 0, w, 0, 0, w, h);
+		src.getPixels(currentPixels, 0, w, 0, 0, w, h);
 		int cores = StackBlurManager.EXECUTOR_THREADS;
 
-		ArrayList<BlurTask> horizontal = new ArrayList<BlurTask>(cores);
-		ArrayList<BlurTask> vertical = new ArrayList<BlurTask>(cores);
+		ArrayList<BlurTask> jobs = new ArrayList<BlurTask>(cores);
 		for (int i = 0; i < cores; i++) {
-			horizontal.add(new BlurTask(currentPixels, w, h, (int) radius, cores, i, 1));
-			vertical.add(new BlurTask(currentPixels, w, h, (int) radius, cores, i, 2));
+			jobs.add(new BlurTask(currentPixels, w, h, Math.round(radius), cores, i, false));
 		}
 
 		try {
-			StackBlurManager.EXECUTOR.invokeAll(horizontal);
+			StackBlurManager.EXECUTOR.invokeAll(jobs);
 		} catch (InterruptedException e) {
-			return null;
+			throw new RuntimeException(e);
+		}
+
+		for (int i = 0, jobsSize = jobs.size(); i < jobsSize; i++) {
+			BlurTask job = jobs.get(i);
+			job.horizontal = true;
 		}
 
 		try {
-			StackBlurManager.EXECUTOR.invokeAll(vertical);
+			StackBlurManager.EXECUTOR.invokeAll(jobs);
 		} catch (InterruptedException e) {
-			return null;
+			throw new RuntimeException(e);
 		}
 
-		return Bitmap.createBitmap(currentPixels, w, h, Bitmap.Config.ARGB_8888);
+		Canvas canvas = new Canvas(dst);
+		canvas.drawBitmap(currentPixels, 0, w, 0, 0, dst.getWidth(), dst.getHeight(), src.hasAlpha(), null);
 	}
 
-	private static void blurIteration(int[] src, int w, int h, int radius, int cores, int core, int step) {
-		int x, y, xp, yp, i;
-		int sp;
-		int stack_start;
-		int stack_i;
-
-		int src_i;
-		int dst_i;
-
-		long sum_r, sum_g, sum_b,
-				sum_in_r, sum_in_g, sum_in_b,
-				sum_out_r, sum_out_g, sum_out_b;
-
-		int wm = w - 1;
-		int hm = h - 1;
-		int div = (radius * 2) + 1;
-		int mul_sum = stackblur_mul[radius];
-		byte shr_sum = stackblur_shr[radius];
-		int[] stack = new int[div];
-
-		if (step == 1)
-		{
-			int minY = core * h / cores;
-			int maxY = (core + 1) * h / cores;
-
-			for(y = minY; y < maxY; y++)
-			{
-				sum_r = sum_g = sum_b =
-				sum_in_r = sum_in_g = sum_in_b =
-				sum_out_r = sum_out_g = sum_out_b = 0;
-
-				src_i = w * y; // start of line (0,y)
-
-				for(i = 0; i <= radius; i++)
-				{
-					stack_i    = i;
-					stack[stack_i] = src[src_i];
-					sum_r += ((src[src_i] >>> 16) & 0xff) * (i + 1);
-					sum_g += ((src[src_i] >>> 8) & 0xff) * (i + 1);
-					sum_b += (src[src_i] & 0xff) * (i + 1);
-					sum_out_r += ((src[src_i] >>> 16) & 0xff);
-					sum_out_g += ((src[src_i] >>> 8) & 0xff);
-					sum_out_b += (src[src_i] & 0xff);
-				}
+	private static class LineBlur {
+		private final int[] src;
+		private final int w;
+		private final int h;
+		private final int radius;
+		private final int div;
+		private final byte[] stackR;
+		private final byte[] stackG;
+		private final byte[] stackB;
+		private final byte[] stackA;
+		private final float divSum;
 
 
-				for(i = 1; i <= radius; i++)
-				{
-					if (i <= wm) src_i += 1;
-					stack_i = i + radius;
-					stack[stack_i] = src[src_i];
-					sum_r += ((src[src_i] >>> 16) & 0xff) * (radius + 1 - i);
-					sum_g += ((src[src_i] >>> 8) & 0xff) * (radius + 1 - i);
-					sum_b += (src[src_i] & 0xff) * (radius + 1 - i);
-					sum_in_r += ((src[src_i] >>> 16) & 0xff);
-					sum_in_g += ((src[src_i] >>> 8) & 0xff);
-					sum_in_b += (src[src_i] & 0xff);
-				}
+		private LineBlur(int[] src, int w, int h, int radius, boolean blurAlpha) {
+			this.src = src;
+			this.w = w;
+			this.h = h;
+			this.radius = radius;
 
-
-				sp = radius;
-				xp = radius;
-				if (xp > wm) xp = wm;
-				src_i = xp + y * w; //   img.pix_ptr(xp, y);
-				dst_i = y * w; // img.pix_ptr(0, y);
-				for(x = 0; x < w; x++)
-				{
-					src[dst_i] = (int)
-								((src[dst_i] & 0xff000000) |
-								((((sum_r * mul_sum) >>> shr_sum) & 0xff) << 16) |
-								((((sum_g * mul_sum) >>> shr_sum) & 0xff) << 8) |
-								((((sum_b * mul_sum) >>> shr_sum) & 0xff)));
-					dst_i += 1;
-
-					sum_r -= sum_out_r;
-					sum_g -= sum_out_g;
-					sum_b -= sum_out_b;
-
-					stack_start = sp + div - radius;
-					if (stack_start >= div) stack_start -= div;
-					stack_i = stack_start;
-
-					sum_out_r -= ((stack[stack_i] >>> 16) & 0xff);
-					sum_out_g -= ((stack[stack_i] >>> 8) & 0xff);
-					sum_out_b -= (stack[stack_i] & 0xff);
-
-					if(xp < wm)
-					{
-						src_i += 1;
-						++xp;
-					}
-
-					stack[stack_i] = src[src_i];
-
-					sum_in_r += ((src[src_i] >>> 16) & 0xff);
-					sum_in_g += ((src[src_i] >>> 8) & 0xff);
-					sum_in_b += (src[src_i] & 0xff);
-					sum_r    += sum_in_r;
-					sum_g    += sum_in_g;
-					sum_b    += sum_in_b;
-
-					++sp;
-					if (sp >= div) sp = 0;
-					stack_i = sp;
-
-					sum_out_r += ((stack[stack_i] >>> 16) & 0xff);
-					sum_out_g += ((stack[stack_i] >>> 8) & 0xff);
-					sum_out_b += (stack[stack_i] & 0xff);
-					sum_in_r  -= ((stack[stack_i] >>> 16) & 0xff);
-					sum_in_g  -= ((stack[stack_i] >>> 8) & 0xff);
-					sum_in_b  -= (stack[stack_i] & 0xff);
-				}
-
+			this.div = (radius * 2) + 1;
+			this.divSum = 1.0f / ((radius + 1) * (radius + 1));
+			this.stackR = new byte[div];
+			this.stackG = new byte[div];
+			this.stackB = new byte[div];
+			if (blurAlpha) {
+				this.stackA = new byte[div];
+			} else {
+				this.stackA = null;
 			}
 		}
 
-		// step 2
-		else if (step == 2)
-		{
-			int minX = core * w / cores;
-			int maxX = (core + 1) * w / cores;
+		private void blurLine(int lineIdx, boolean horizontal) {
+			int stride;
+			int stack_i = 0;
+			int stack_drop = 0;
+			int inputValue;
 
-			for(x = minX; x < maxX; x++)
-			{
-				sum_r =    sum_g =    sum_b =
-				sum_in_r = sum_in_g = sum_in_b =
-				sum_out_r = sum_out_g = sum_out_b = 0;
+			int src_i;
+			int dst_i;
 
-				src_i = x; // x,0
-				for(i = 0; i <= radius; i++)
-				{
-					stack_i    = i;
-					stack[stack_i] = src[src_i];
-					sum_r           += ((src[src_i] >>> 16) & 0xff) * (i + 1);
-					sum_g           += ((src[src_i] >>> 8) & 0xff) * (i + 1);
-					sum_b           += (src[src_i] & 0xff) * (i + 1);
-					sum_out_r       += ((src[src_i] >>> 16) & 0xff);
-					sum_out_g       += ((src[src_i] >>> 8) & 0xff);
-					sum_out_b       += (src[src_i] & 0xff);
+			int r, g, b, a;
+			int sumR, sumG, sumB, sumA;
+			int sumInR, sumInG, sumInB, sumInA;
+			int sumOutR, sumOutG, sumOutB, sumOutA;
+
+			int max_i;
+			if (horizontal) {
+				stride = 1;
+				src_i = w * lineIdx;
+				max_i = src_i + w;
+			} else {
+				stride = w;
+				src_i = lineIdx;
+				max_i = src_i + w * h;
+			}
+
+			dst_i = src_i;
+			sumR = sumG = sumB = sumA = 0;
+			sumInR = sumInG = sumInB = sumInA = 0;
+			sumOutR = sumOutG = sumOutB = sumOutA = 0;
+
+			for (int i = 0; i <= radius; i++) {
+				stack_i = i;
+				inputValue = src[src_i];
+				if (this.stackA != null) {
+					a = inputValue >>> 24 & 0xFF;
+					stackA[stack_i] = (byte) a;
+					sumA += a * (i + 1);
+					sumOutA += a;
 				}
-				for(i = 1; i <= radius; i++)
-				{
-					if(i <= hm) src_i += w; // +stride
+				r = (inputValue >>> 16) & 0xFF;
+				g = (inputValue >>> 8) & 0xFF;
+				b = inputValue & 0xFF;
+				stackR[stack_i] = (byte) r;
+				stackG[stack_i] = (byte) g;
+				stackB[stack_i] = (byte) b;
+				sumR += r * (i + 1);
+				sumG += g * (i + 1);
+				sumB += b * (i + 1);
+				sumOutR += r;
+				sumOutG += g;
+				sumOutB += b;
+			}
 
-					stack_i = i + radius;
-					stack[stack_i] = src[src_i];
-					sum_r += ((src[src_i] >>> 16) & 0xff) * (radius + 1 - i);
-					sum_g += ((src[src_i] >>> 8) & 0xff) * (radius + 1 - i);
-					sum_b += (src[src_i] & 0xff) * (radius + 1 - i);
-					sum_in_r += ((src[src_i] >>> 16) & 0xff);
-					sum_in_g += ((src[src_i] >>> 8) & 0xff);
-					sum_in_b += (src[src_i] & 0xff);
+			for (int i = 1; i <= radius; i++) {
+				if (src_i + stride < max_i) {
+					src_i += stride;
+				}
+				stack_i = i + radius;
+				inputValue = src[src_i];
+				if (stackA != null) {
+					a = (inputValue >>> 24) & 0xFF;
+					stackA[stack_i] = (byte) a;
+					sumA += a * (radius + 1 - i);
+					sumInA += a;
+				}
+				r = (inputValue >>> 16) & 0xFF;
+				g = (inputValue >>> 8) & 0xFF;
+				b = inputValue & 0xFF;
+				stackR[stack_i] = (byte) r;
+				stackG[stack_i] = (byte) g;
+				stackB[stack_i] = (byte) b;
+				sumR += r * (radius + 1 - i);
+				sumG += g * (radius + 1 - i);
+				sumB += b * (radius + 1 - i);
+				sumInR += r;
+				sumInG += g;
+				sumInB += b;
+			}
+
+
+			stack_i = radius;
+			while (dst_i < max_i) {
+				if (src_i + stride < max_i) {
+					src_i += stride;
 				}
 
-				sp = radius;
-				yp = radius;
-				if (yp > hm) yp = hm;
-				src_i = x + yp * w; // img.pix_ptr(x, yp);
-				dst_i = x;               // img.pix_ptr(x, 0);
-				for(y = 0; y < h; y++)
-				{
-					src[dst_i] = (int)
-							((src[dst_i] & 0xff000000) |
-							((((sum_r * mul_sum) >>> shr_sum) & 0xff) << 16) |
-							((((sum_g * mul_sum) >>> shr_sum) & 0xff) << 8) |
-							((((sum_b * mul_sum) >>> shr_sum) & 0xff)));
-					dst_i += w;
+				a = (stackA == null) ? (src[dst_i] >>> 24) : (int) (sumA * divSum);
+				r = (int) (sumR * divSum);
+				g = (int) (sumG * divSum);
+				b = (int) (sumB * divSum);
+				src[dst_i] = (a << 24) | (r << 16) | (g << 8) | b;
 
-					sum_r -= sum_out_r;
-					sum_g -= sum_out_g;
-					sum_b -= sum_out_b;
+				dst_i += stride;
 
-					stack_start = sp + div - radius;
-					if(stack_start >= div) stack_start -= div;
-					stack_i = stack_start;
+				sumR -= sumOutR;
+				sumG -= sumOutG;
+				sumB -= sumOutB;
+				sumA -= sumOutA;
 
-					sum_out_r -= ((stack[stack_i] >>> 16) & 0xff);
-					sum_out_g -= ((stack[stack_i] >>> 8) & 0xff);
-					sum_out_b -= (stack[stack_i] & 0xff);
+				stack_drop = (stack_i + radius + 1) % div;
+				sumOutR -= (stackR[stack_drop] & 0xFF);
+				sumOutG -= (stackG[stack_drop] & 0xFF);
+				sumOutB -= (stackB[stack_drop] & 0xFF);
+				if (stackA != null) {
+					sumOutA -= (stackA[stack_drop] & 0xFF);
+				}
 
-					if(yp < hm)
-					{
-						src_i += w; // stride
-						++yp;
-					}
+				inputValue = src[src_i];
+				r = (inputValue >>> 16) & 0xFF;
+				stackR[stack_drop] = (byte) r;
+				sumInR += r;
+				sumR += sumInR;
 
-					stack[stack_i] = src[src_i];
+				g = (inputValue >>> 8) & 0xFF;
+				stackG[stack_drop] = (byte) g;
+				sumInG += g;
+				sumG += sumInG;
 
-					sum_in_r += ((src[src_i] >>> 16) & 0xff);
-					sum_in_g += ((src[src_i] >>> 8) & 0xff);
-					sum_in_b += (src[src_i] & 0xff);
-					sum_r    += sum_in_r;
-					sum_g    += sum_in_g;
-					sum_b    += sum_in_b;
+				b = inputValue & 0xFF;
+				stackB[stack_drop] = (byte) b;
+				sumInB += b;
+				sumB += sumInB;
 
-					++sp;
-					if (sp >= div) sp = 0;
-					stack_i = sp;
+				if (stackA != null) {
+					a = (inputValue >>> 24) & 0xFF;
+					stackA[stack_drop] = (byte) a;
+					sumInA += a;
+					sumA += sumInA;
+				}
 
-					sum_out_r += ((stack[stack_i] >>> 16) & 0xff);
-					sum_out_g += ((stack[stack_i] >>> 8) & 0xff);
-					sum_out_b += (stack[stack_i] & 0xff);
-					sum_in_r  -= ((stack[stack_i] >>> 16) & 0xff);
-					sum_in_g  -= ((stack[stack_i] >>> 8) & 0xff);
-					sum_in_b  -= (stack[stack_i] & 0xff);
+				stack_i = (stack_i + 1) % div;
+
+				sumOutR += (stackR[stack_i] & 0xFF);
+				sumInR -= (stackR[stack_i] & 0xFF);
+
+				sumOutG += (stackG[stack_i] & 0xFF);
+				sumInG -= (stackG[stack_i] & 0xFF);
+
+				sumOutB += (stackB[stack_i] & 0xFF);
+				sumInB -= (stackB[stack_i] & 0xFF);
+
+				if (stackA != null) {
+					sumOutA += (stackA[stack_i] & 0xFF);
+					sumInA -= (stackA[stack_i] & 0xFF);
 				}
 			}
 		}
-
 	}
 
 	private static class BlurTask implements Callable<Void> {
-		private final int[] _src;
+		private final LineBlur _blur;
 		private final int _w;
 		private final int _h;
-		private final int _radius;
 		private final int _totalCores;
 		private final int _coreIndex;
-		private final int _round;
+		boolean horizontal = false;
 
-		public BlurTask(int[] src, int w, int h, int radius, int totalCores, int coreIndex, int round) {
-			_src = src;
+		BlurTask(int[] src, int w, int h, int radius, int totalCores, int coreIndex, boolean blurAlpha) {
 			_w = w;
 			_h = h;
-			_radius = radius;
 			_totalCores = totalCores;
 			_coreIndex = coreIndex;
-			_round = round;
+			_blur = new LineBlur(src, w, h, radius, blurAlpha);
 		}
 
 		@Override public Void call() throws Exception {
-			blurIteration(_src, _w, _h, _radius, _totalCores, _coreIndex, _round);
+			int _minLine;
+			int _maxLine;
+			if (horizontal) {
+				_minLine = _h * _coreIndex / _totalCores;
+				_maxLine = _h * (_coreIndex + 1) / _totalCores;
+			} else {
+				_minLine = _w * _coreIndex / _totalCores;
+				_maxLine = _w * (_coreIndex + 1) / _totalCores;
+			}
+
+			for (int i = _minLine; i < _maxLine; i++) {
+				_blur.blurLine(i, horizontal);
+			}
 			return null;
 		}
 

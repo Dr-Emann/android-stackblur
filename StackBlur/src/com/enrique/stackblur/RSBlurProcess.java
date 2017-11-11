@@ -2,6 +2,8 @@ package com.enrique.stackblur;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.os.Build;
 import android.support.v8.renderscript.Allocation;
 import android.support.v8.renderscript.Element;
@@ -21,19 +23,22 @@ class RSBlurProcess implements BlurProcess {
 	}
 
 	@Override
-	public Bitmap blur(Bitmap original, float radius) {
-		int width = original.getWidth();
-		int height = original.getHeight();
-		Bitmap blurred = original.copy(Bitmap.Config.ARGB_8888, true);
+	public void blur(Bitmap src, Bitmap dst, float radius) {
+		int width = dst.getWidth();
+		int height = dst.getHeight();
+
+		Canvas canvas = new Canvas(dst);
+		Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
+		canvas.drawBitmap(src, null, rect, null);
 
 		ScriptC_blur blurScript = new ScriptC_blur(_rs, context.getResources(), R.raw.blur);
 
-		Allocation inAllocation = Allocation.createFromBitmap(_rs, blurred, Allocation.MipmapControl.MIPMAP_NONE, Allocation.USAGE_SCRIPT);
+		Allocation inAllocation = Allocation.createFromBitmap(_rs, dst);
 
 		blurScript.set_gIn(inAllocation);
 		blurScript.set_width(width);
 		blurScript.set_height(height);
-		blurScript.set_radius((int) radius);
+		blurScript.set_radius(Math.round(radius));
 
 		int[] row_indices = new int[height];
 		for (int i = 0; i < height; i++) {
@@ -53,8 +58,6 @@ class RSBlurProcess implements BlurProcess {
 
 		blurScript.forEach_blur_h(rows);
 		blurScript.forEach_blur_v(columns);
-		inAllocation.copyTo(blurred);
-
-		return blurred;
+		inAllocation.copyTo(dst);
 	}
 }

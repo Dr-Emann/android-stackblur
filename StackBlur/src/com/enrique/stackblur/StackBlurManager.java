@@ -70,7 +70,8 @@ public class StackBlurManager {
 	 * @param radius
 	 */
 	public Bitmap process(int radius) {
-		_result = _blurProcess.blur(_image, radius);
+		_result = Bitmap.createBitmap(_image.getWidth(), _image.getHeight(), Bitmap.Config.ARGB_8888);
+		_blurProcess.blur(_image, _result, radius);
 		return _result;
 	}
 
@@ -108,7 +109,8 @@ public class StackBlurManager {
 	 */
 	public Bitmap processNatively(int radius) {
 		NativeBlurProcess blur = new NativeBlurProcess();
-		_result = blur.blur(_image, radius);
+		_result = Bitmap.createBitmap(_image.getWidth(), _image.getHeight(), Bitmap.Config.ARGB_8888);
+		blur.blur(_image, _result, radius);
 		return _result;
 	}
 
@@ -137,7 +139,8 @@ public class StackBlurManager {
 		else {
 			blurProcess = new NativeBlurProcess();
 		}
-		_result = blurProcess.blur(_image, radius);
+		_result = Bitmap.createBitmap(_image.getWidth(), _image.getHeight(), Bitmap.Config.ARGB_8888);
+		blurProcess.blur(_image, _result, radius);
 		return _result;
 	}
 }

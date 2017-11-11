@@ -59,5 +59,9 @@ class RSBlurProcess implements BlurProcess {
 		blurScript.forEach_blur_h(rows);
 		blurScript.forEach_blur_v(columns);
 		inAllocation.copyTo(dst);
+		rows.destroy();
+		columns.destroy();
+		inAllocation.destroy();
+		blurScript.destroy();
 	}
 }

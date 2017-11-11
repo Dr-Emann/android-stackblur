@@ -43,23 +43,22 @@ class JavaBlurProcess implements BlurProcess {
 		if (radius < 0) {
 			throw new IllegalArgumentException("radius must be >= 0");
 		}
-		if (radius == 0) {
-			if (src != dst) {
-				Canvas canvas = new Canvas(dst);
-				Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
-				canvas.drawBitmap(src, null, rect, null);
-			}
-			return;
+		if (src != dst) {
+			Canvas canvas = new Canvas(dst);
+			Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
+			canvas.drawBitmap(src, null, rect, null);
 		}
-		int w = src.getWidth();
-		int h = src.getHeight();
-		int[] currentPixels = new int[w * h];
-		src.getPixels(currentPixels, 0, w, 0, 0, w, h);
+		if (radius == 0) return;
+		int w = dst.getWidth();
+		int h = dst.getHeight();
 		int cores = StackBlurManager.EXECUTOR_THREADS;
+
+		float scale = Math.min((float) dst.getWidth() / src.getWidth(), (float) dst.getHeight() / src.getHeight());
+		radius *= scale;
 
 		ArrayList<BlurTask> jobs = new ArrayList<BlurTask>(cores);
 		for (int i = 0; i < cores; i++) {
-			jobs.add(new BlurTask(currentPixels, w, h, Math.round(radius), cores, i, false));
+			jobs.add(new BlurTask(dst, w, h, Math.round(radius), cores, i, false));
 		}
 
 		try {
@@ -78,13 +77,10 @@ class JavaBlurProcess implements BlurProcess {
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
-
-		Canvas canvas = new Canvas(dst);
-		canvas.drawBitmap(currentPixels, 0, w, 0, 0, dst.getWidth(), dst.getHeight(), src.hasAlpha(), null);
 	}
 
 	private static class LineBlur {
-		private final int[] src;
+		private final Bitmap src;
 		private final int w;
 		private final int h;
 		private final int radius;
@@ -94,9 +90,10 @@ class JavaBlurProcess implements BlurProcess {
 		private final byte[] stackB;
 		private final byte[] stackA;
 		private final float divSum;
+		private final int[] line;
 
 
-		private LineBlur(int[] src, int w, int h, int radius, boolean blurAlpha) {
+		private LineBlur(Bitmap src, int w, int h, int radius, boolean blurAlpha) {
 			this.src = src;
 			this.w = w;
 			this.h = h;
@@ -112,41 +109,36 @@ class JavaBlurProcess implements BlurProcess {
 			} else {
 				this.stackA = null;
 			}
+			line = new int[Math.max(w, h)];
 		}
 
 		private void blurLine(int lineIdx, boolean horizontal) {
-			int stride;
+			int lineLen;
+			if (horizontal) {
+				src.getPixels(line, 0, w, 0, lineIdx, w, 1);
+				lineLen = w;
+			} else {
+				src.getPixels(line, 0, 1, lineIdx, 0, 1, h);
+				lineLen = h;
+			}
 			int stack_i = 0;
 			int stack_drop = 0;
 			int inputValue;
 
-			int src_i;
-			int dst_i;
+			int src_i = 0, dst_i = 0;
 
 			int r, g, b, a;
 			int sumR, sumG, sumB, sumA;
 			int sumInR, sumInG, sumInB, sumInA;
 			int sumOutR, sumOutG, sumOutB, sumOutA;
 
-			int max_i;
-			if (horizontal) {
-				stride = 1;
-				src_i = w * lineIdx;
-				max_i = src_i + w;
-			} else {
-				stride = w;
-				src_i = lineIdx;
-				max_i = src_i + w * h;
-			}
-
-			dst_i = src_i;
 			sumR = sumG = sumB = sumA = 0;
 			sumInR = sumInG = sumInB = sumInA = 0;
 			sumOutR = sumOutG = sumOutB = sumOutA = 0;
 
 			for (int i = 0; i <= radius; i++) {
 				stack_i = i;
-				inputValue = src[src_i];
+				inputValue = line[src_i];
 				if (this.stackA != null) {
 					a = inputValue >>> 24 & 0xFF;
 					stackA[stack_i] = (byte) a;
@@ -168,11 +160,11 @@ class JavaBlurProcess implements BlurProcess {
 			}
 
 			for (int i = 1; i <= radius; i++) {
-				if (src_i + stride < max_i) {
-					src_i += stride;
+				if (src_i + 1 < lineLen) {
+					src_i += 1;
 				}
 				stack_i = i + radius;
-				inputValue = src[src_i];
+				inputValue = line[src_i];
 				if (stackA != null) {
 					a = (inputValue >>> 24) & 0xFF;
 					stackA[stack_i] = (byte) a;
@@ -195,18 +187,21 @@ class JavaBlurProcess implements BlurProcess {
 
 
 			stack_i = radius;
-			while (dst_i < max_i) {
-				if (src_i + stride < max_i) {
-					src_i += stride;
+			while (true) {
+				if (src_i + 1 < lineLen) {
+					src_i += 1;
 				}
 
-				a = (stackA == null) ? (src[dst_i] >>> 24) : (int) (sumA * divSum);
+				a = (stackA == null) ? (line[dst_i] >>> 24) : (int) (sumA * divSum);
 				r = (int) (sumR * divSum);
 				g = (int) (sumG * divSum);
 				b = (int) (sumB * divSum);
-				src[dst_i] = (a << 24) | (r << 16) | (g << 8) | b;
+				line[dst_i] = (a << 24) | (r << 16) | (g << 8) | b;
 
-				dst_i += stride;
+				dst_i += 1;
+				if (dst_i >= lineLen) {
+					break;
+				}
 
 				sumR -= sumOutR;
 				sumG -= sumOutG;
@@ -221,7 +216,7 @@ class JavaBlurProcess implements BlurProcess {
 					sumOutA -= (stackA[stack_drop] & 0xFF);
 				}
 
-				inputValue = src[src_i];
+				inputValue = line[src_i];
 				r = (inputValue >>> 16) & 0xFF;
 				stackR[stack_drop] = (byte) r;
 				sumInR += r;
@@ -260,6 +255,12 @@ class JavaBlurProcess implements BlurProcess {
 					sumInA -= (stackA[stack_i] & 0xFF);
 				}
 			}
+
+			if (horizontal) {
+				src.setPixels(line, 0, w, 0, lineIdx, w, 1);
+			} else {
+				src.setPixels(line, 0, 1, lineIdx, 0, 1, h);
+			}
 		}
 	}
 
@@ -271,7 +272,7 @@ class JavaBlurProcess implements BlurProcess {
 		private final int _coreIndex;
 		boolean horizontal = false;
 
-		BlurTask(int[] src, int w, int h, int radius, int totalCores, int coreIndex, boolean blurAlpha) {
+		BlurTask(Bitmap src, int w, int h, int radius, int totalCores, int coreIndex, boolean blurAlpha) {
 			_w = w;
 			_h = h;
 			_totalCores = totalCores;

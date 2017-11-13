@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
@@ -19,20 +20,20 @@ import android.widget.Toast;
 
 import com.enrique.stackblur.StackBlurManager;
 
-import roboguice.activity.RoboActivity;
-import roboguice.inject.InjectView;
+import butterknife.BindView;
+import butterknife.ButterKnife;
 
-public class BenchmarkActivity extends RoboActivity {
+public class BenchmarkActivity extends AppCompatActivity {
 
-	@InjectView(R.id.progress_java)       ProgressBar _javaProgressbar;
-	@InjectView(R.id.progress_native)     ProgressBar _nativeProgressbar;
-	@InjectView(R.id.progress_rs)         ProgressBar _rsProgressbar;
-	@InjectView(R.id.detail_java)         TextView    _javaDetail;
-	@InjectView(R.id.detail_native)       TextView    _nativeDetail;
-	@InjectView(R.id.detail_rs)           TextView    _rsDetail;
-	@InjectView(R.id.blur_amount)         SeekBar     _blurAmt;
-	@InjectView(R.id.blur_amount_detail)  TextView    _blurAmtText;
-	@InjectView(R.id.result_img)          ImageView   _resultImage;
+	@BindView(R.id.progress_java)       ProgressBar _javaProgressbar;
+	@BindView(R.id.progress_native)     ProgressBar _nativeProgressbar;
+	@BindView(R.id.progress_rs)         ProgressBar _rsProgressbar;
+	@BindView(R.id.detail_java)         TextView    _javaDetail;
+	@BindView(R.id.detail_native)       TextView    _nativeDetail;
+	@BindView(R.id.detail_rs)           TextView    _rsDetail;
+	@BindView(R.id.blur_amount)         SeekBar     _blurAmt;
+	@BindView(R.id.blur_amount_detail)  TextView    _blurAmtText;
+	@BindView(R.id.result_img)          ImageView   _resultImage;
 
 	private BenchmarkTask _benchmarkTask;
 
@@ -40,6 +41,8 @@ public class BenchmarkActivity extends RoboActivity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_benchmark);
+
+		ButterKnife.bind(this);
 
 		_blurAmt.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 			@Override

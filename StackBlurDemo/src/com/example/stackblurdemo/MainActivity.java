@@ -3,14 +3,13 @@ package com.example.stackblurdemo;
 import java.io.IOException;
 import java.io.InputStream;
 
-import roboguice.activity.RoboActivity;
-import roboguice.inject.InjectView;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -26,12 +25,15 @@ import android.widget.ToggleButton;
 
 import com.enrique.stackblur.StackBlurManager;
 
-public class MainActivity extends RoboActivity {
+import butterknife.BindView;
+import butterknife.ButterKnife;
+
+public class MainActivity extends AppCompatActivity {
     
-	@InjectView(R.id.imageView)        ImageView    _imageView;
-	@InjectView(R.id.blur_amount)      SeekBar      _seekBar;
-	@InjectView(R.id.toggleButton)     ToggleButton _toggleButton;
-	@InjectView(R.id.typeSelectSpinner) Spinner     _typeSelectSpinner;
+	@BindView(R.id.imageView)        ImageView    _imageView;
+	@BindView(R.id.blur_amount)      SeekBar      _seekBar;
+	@BindView(R.id.toggleButton)     ToggleButton _toggleButton;
+	@BindView(R.id.typeSelectSpinner) Spinner     _typeSelectSpinner;
 	
 	
 	private StackBlurManager _stackBlurManager;
@@ -44,6 +46,7 @@ public class MainActivity extends RoboActivity {
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+		ButterKnife.bind(this);
 		
 		_stackBlurManager = new StackBlurManager(getBitmapFromAsset(this, "android_platform_256.png"));
 		

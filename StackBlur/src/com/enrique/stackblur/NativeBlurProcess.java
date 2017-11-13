@@ -3,6 +3,7 @@ package com.enrique.stackblur;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.concurrent.Callable;
@@ -12,7 +13,7 @@ import java.util.concurrent.Callable;
  * Blur using the NDK and native code.
  */
 class NativeBlurProcess implements BlurProcess {
-	private static native void functionToBlur(Bitmap bitmapOut, int radius, int threadCount, int threadIndex, int round);
+	private static native void functionToBlur(Bitmap bitmapOut, int radius, int threadCount, int threadIndex, boolean horizontal);
 
 	static {
 		System.loadLibrary("blur");
@@ -20,27 +21,45 @@ class NativeBlurProcess implements BlurProcess {
 
 	@Override
 	public void blur(Bitmap src, Bitmap dst, float radius) {
-		Canvas canvas = new Canvas(dst);
-		Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
-		canvas.drawBitmap(src, null, rect, null);
+		if (!dst.isMutable()) {
+			throw new IllegalArgumentException("dst must be mutable");
+		}
+		if (radius < 0) {
+			throw new IllegalArgumentException("radius must be >= 0");
+		}
+		if (dst != src) {
+			Canvas canvas = new Canvas(dst);
+			Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
+			canvas.drawBitmap(src, null, rect, null);
+		}
+		float scale = Math.min((float) dst.getWidth() / src.getWidth(), (float) dst.getHeight() / src.getHeight());
+		radius *= scale;
+
+		int roundRadius = Math.round(radius);
+		if (roundRadius == 0) {
+			return;
+		}
 
 		int cores = StackBlurManager.EXECUTOR_THREADS;
 
-		ArrayList<NativeTask> horizontal = new ArrayList<NativeTask>(cores);
-		ArrayList<NativeTask> vertical = new ArrayList<NativeTask>(cores);
+		ArrayList<NativeTask> jobs = new ArrayList<NativeTask>(cores);
 		for (int i = 0; i < cores; i++) {
-			horizontal.add(new NativeTask(dst, (int) radius, cores, i, 1));
-			vertical.add(new NativeTask(dst, (int) radius, cores, i, 2));
+			jobs.add(new NativeTask(dst, roundRadius, cores, i));
 		}
 
 		try {
-			StackBlurManager.EXECUTOR.invokeAll(horizontal);
+			StackBlurManager.EXECUTOR.invokeAll(jobs);
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
 
+		for (int i = 0, jobsSize = jobs.size(); i < jobsSize; i++) {
+			NativeTask job = jobs.get(i);
+			job.horizontal = true;
+		}
+
 		try {
-			StackBlurManager.EXECUTOR.invokeAll(vertical);
+			StackBlurManager.EXECUTOR.invokeAll(jobs);
 		} catch (InterruptedException e) {
 			throw new RuntimeException(e);
 		}
@@ -51,18 +70,18 @@ class NativeBlurProcess implements BlurProcess {
 		private final int _radius;
 		private final int _totalCores;
 		private final int _coreIndex;
-		private final int _round;
+		boolean horizontal;
 
-		NativeTask(Bitmap bitmapOut, int radius, int totalCores, int coreIndex, int round) {
+		NativeTask(Bitmap bitmapOut, int radius, int totalCores, int coreIndex) {
 			_bitmapOut = bitmapOut;
 			_radius = radius;
 			_totalCores = totalCores;
 			_coreIndex = coreIndex;
-			_round = round;
+			horizontal = false;
 		}
 
 		@Override public Void call() throws Exception {
-			functionToBlur(_bitmapOut, _radius, _totalCores, _coreIndex, _round);
+			functionToBlur(_bitmapOut, _radius, _totalCores, _coreIndex, horizontal);
 			return null;
 		}
 

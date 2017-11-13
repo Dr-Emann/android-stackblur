@@ -48,17 +48,20 @@ class JavaBlurProcess implements BlurProcess {
 			Rect rect = new Rect(0, 0, dst.getWidth(), dst.getHeight());
 			canvas.drawBitmap(src, null, rect, null);
 		}
-		if (radius == 0) return;
-		int w = dst.getWidth();
-		int h = dst.getHeight();
-		int cores = StackBlurManager.EXECUTOR_THREADS;
-
 		float scale = Math.min((float) dst.getWidth() / src.getWidth(), (float) dst.getHeight() / src.getHeight());
 		radius *= scale;
 
+		int roundRadius = Math.round(radius);
+		if (roundRadius == 0) {
+			return;
+		}
+
+		int cores = StackBlurManager.EXECUTOR_THREADS;
+
+
 		ArrayList<BlurTask> jobs = new ArrayList<BlurTask>(cores);
 		for (int i = 0; i < cores; i++) {
-			jobs.add(new BlurTask(dst, w, h, Math.round(radius), cores, i, false));
+			jobs.add(new BlurTask(dst, Math.round(radius), cores, i, false));
 		}
 
 		try {
@@ -270,12 +273,12 @@ class JavaBlurProcess implements BlurProcess {
 		private final int _coreIndex;
 		boolean horizontal = false;
 
-		BlurTask(Bitmap src, int w, int h, int radius, int totalCores, int coreIndex, boolean blurAlpha) {
-			_w = w;
-			_h = h;
+		BlurTask(Bitmap src, int radius, int totalCores, int coreIndex, boolean blurAlpha) {
+			_w = src.getWidth();
+			_h = src.getHeight();
 			_totalCores = totalCores;
 			_coreIndex = coreIndex;
-			_blur = new LineBlur(src, w, h, radius, blurAlpha);
+			_blur = new LineBlur(src, _w, _h, radius, blurAlpha);
 		}
 
 		@Override public Void call() throws Exception {

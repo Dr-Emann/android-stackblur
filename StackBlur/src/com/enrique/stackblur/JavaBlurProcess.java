@@ -89,7 +89,7 @@ class JavaBlurProcess implements BlurProcess {
 		private final byte[] stackG;
 		private final byte[] stackB;
 		private final byte[] stackA;
-		private final float divSum;
+		private final int divSum;
 		private final int[] line;
 
 
@@ -100,7 +100,7 @@ class JavaBlurProcess implements BlurProcess {
 			this.radius = radius;
 
 			this.div = (radius * 2) + 1;
-			this.divSum = 1.0f / ((radius + 1) * (radius + 1));
+			this.divSum = (radius + 1) * (radius + 1);
 			this.stackR = new byte[div];
 			this.stackG = new byte[div];
 			this.stackB = new byte[div];
@@ -185,19 +185,17 @@ class JavaBlurProcess implements BlurProcess {
 				sumInB += b;
 			}
 
-
 			stack_i = radius;
 			while (true) {
 				if (src_i + 1 < lineLen) {
 					src_i += 1;
 				}
 
-				a = (stackA == null) ? (line[dst_i] >>> 24) : (int) (sumA * divSum);
-				r = (int) (sumR * divSum);
-				g = (int) (sumG * divSum);
-				b = (int) (sumB * divSum);
+				a = (stackA == null) ? (line[dst_i] >>> 24) : ((sumA + divSum / 2) / divSum);
+				r = (sumR + divSum / 2) / divSum;
+				g = (sumG + divSum / 2) / divSum;
+				b = (sumB + divSum / 2) / divSum;
 				line[dst_i] = (a << 24) | (r << 16) | (g << 8) | b;
-
 				dst_i += 1;
 				if (dst_i >= lineLen) {
 					break;
